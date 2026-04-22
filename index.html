@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JiffyShirts Service Level Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f7fa; color: #1f2937; padding: 20px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  h1 { font-size: 24px; color: #111827; }
+  .meta { color: #6b7280; font-size: 13px; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; padding: 16px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .controls label { font-weight: 500; font-size: 14px; }
+  .controls input[type="number"] { width: 70px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; }
+  .upload-zone { flex: 1; min-width: 280px; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 14px; text-align: center; cursor: pointer; transition: all 0.15s; background: #fafbfc; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: #6366f1; background: #eef2ff; }
+  .upload-zone input { display: none; }
+  button { background: #4f46e5; color: #fff; border: 0; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+  button:hover { background: #4338ca; }
+  button.secondary { background: #e5e7eb; color: #374151; }
+  button.secondary:hover { background: #d1d5db; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .kpi { background: #fff; padding: 18px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-left: 4px solid #6366f1; }
+  .kpi .label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .kpi .value { font-size: 28px; font-weight: 700; color: #111827; margin-top: 6px; }
+  .kpi .sub { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .kpi.good { border-left-color: #10b981; }
+  .kpi.warn { border-left-color: #f59e0b; }
+  .kpi.bad  { border-left-color: #ef4444; }
+  .kpi.info { border-left-color: #3b82f6; }
+  .kpi.worked { border-left-color: #8b5cf6; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .card h2 { font-size: 16px; margin-bottom: 14px; color: #111827; font-weight: 600; }
+  .chart-wrap { position: relative; height: 280px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; background: #f9fafb; color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
+  tr:hover td { background: #f9fafb; }
+  tfoot td { font-weight: 700; background: #f3f4f6; border-top: 2px solid #d1d5db; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .pct-bar { display: inline-block; height: 8px; background: #e5e7eb; border-radius: 4px; width: 100px; vertical-align: middle; margin-right: 8px; }
+  .pct-bar > div { height: 100%; background: #6366f1; border-radius: 4px; }
+
+  .bucket-row td { padding: 12px; }
+  .bucket-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .bucket-pill.p1 { background: #fee2e2; color: #991b1b; }
+  .bucket-pill.p2 { background: #fed7aa; color: #9a3412; }
+  .bucket-pill.p3 { background: #fef3c7; color: #92400e; }
+  .bucket-pill.p4 { background: #d1fae5; color: #065f46; }
+
+  .empty-state { padding: 60px 20px; text-align: center; color: #6b7280; background: #fff; border-radius: 10px; }
+  .empty-state .big { font-size: 48px; margin-bottom: 12px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #e5e7eb; }
+  .tab { padding: 10px 18px; cursor: pointer; font-size: 14px; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; }
+  .tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+
+  .scroll-box { max-height: 400px; overflow-y: auto; }
+  .hidden { display: none; }
+  .search-box { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-new { background: #dbeafe; color: #1e40af; }
+  .badge-open { background: #fef3c7; color: #92400e; }
+  .badge-vip { background: #fce7f3; color: #9d174d; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 JiffyShirts Service Level Dashboard</h1>
+    <div class="meta" id="meta">Upload a CSV export to get started</div>
+  </div>
+  <div class="meta" id="now"></div>
+</header>
+
+<div class="controls">
+  <label class="upload-zone" id="uploadZone">
+    <strong>📂 Current snapshot</strong>
+    <div style="font-size:12px;color:#6b7280;margin-top:4px;">Latest Zendesk queue export</div>
+    <input type="file" id="csvFile" accept=".csv,.zip" />
+  </label>
+  <label class="upload-zone" id="prevUploadZone">
+    <strong>📂 Previous snapshot (optional)</strong>
+    <div style="font-size:12px;color:#6b7280;margin-top:4px;">Earlier queue export — enables "Worked" comparison</div>
+    <input type="file" id="prevFile" accept=".csv,.zip" />
+  </label>
+  <div>
+    <label for="slaTarget">SLA Target (hrs):</label>
+    <input type="number" id="slaTarget" value="12" min="1" max="72" />
+  </div>
+  <div style="font-size:13px;color:#6b7280;">🌐 <strong>All times: CST/CDT</strong></div>
+  <button id="refreshBtn" class="secondary">🔄 Recalculate</button>
+  <button id="sampleBtn" class="secondary">Load Sample</button>
+</div>
+
+<div id="emptyState" class="empty-state">
+  <div class="big">📥</div>
+  <div>Upload your ticket export to see queue health, volume trends, worked counts, and issue-type breakdown.</div>
+</div>
+
+<div id="dashboard" class="hidden">
+
+  <div class="card" style="margin-bottom: 18px; padding: 14px 18px; background: #eef2ff; border-left: 4px solid #4f46e5;">
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;font-size:13px;">
+      <div><strong style="color:#4338ca;">📅 Snapshot covers:</strong> <span id="tsDataRange">—</span></div>
+      <div><strong style="color:#4338ca;">📥 CSV loaded:</strong> <span id="tsLoaded">—</span></div>
+      <div id="tsAge" style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:6px;font-weight:600;">Snapshot age: —</div>
+      <div><strong style="color:#4338ca;">🌐 All times in:</strong> CST/CDT</div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#4b5563;border-top:1px solid #c7d2fe;padding-top:10px;">
+      <strong>⚠️ Reading these numbers:</strong>
+      <span style="margin-left:6px;"><b>New In</b> = tickets whose <em>Requested</em> timestamp falls on that day. Counts stop at the snapshot time.</span>
+      <span style="margin-left:12px;"><b>Worked (since previous)</b> = tickets that were in the <em>Previous</em> snapshot but are no longer in <em>Current</em> — i.e., removed from the queue (resolved/closed/merged).</span>
+      <span style="margin-left:12px;color:#dc2626;"><b>Worked requires both snapshots uploaded.</b> With only a current snapshot, we can't derive what's been removed.</span>
+    </div>
+  </div>
+
+  <h3 style="font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📍 Current State (from Current snapshot)</h3>
+  <div class="kpi-grid">
+    <div class="kpi info"><div class="label">Total in Queue</div><div class="value" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
+    <div class="kpi info"><div class="label">New In Today</div><div class="value" id="kNewToday">—</div><div class="sub" id="kNewTodaySub">Requested today</div></div>
+    <div class="kpi info"><div class="label">New In Yesterday</div><div class="value" id="kNewYest">—</div><div class="sub" id="kNewYestSub">Requested yesterday</div></div>
+    <div class="kpi good"><div class="label">Service Level</div><div class="value" id="kSL">—</div><div class="sub" id="kSLSub">within SLA</div></div>
+    <div class="kpi bad"><div class="label">SLA Breached</div><div class="value" id="kBreach">—</div><div class="sub" id="kBreachSub"></div></div>
+    <div class="kpi warn"><div class="label">Oldest Ticket</div><div class="value" id="kOldest">—</div><div class="sub">hours in queue</div></div>
+  </div>
+
+  <div id="comparisonSection" style="display:none;">
+    <h3 style="font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:26px;margin-bottom:10px;">🔄 Comparison Layer (Current vs Previous)</h3>
+    <div class="kpi-grid">
+      <div class="kpi worked"><div class="label">Worked (removed from queue)</div><div class="value" id="kWorked">—</div><div class="sub" id="kWorkedSub">IDs gone between snapshots</div></div>
+      <div class="kpi info"><div class="label">New Arrivals</div><div class="value" id="kAdded">—</div><div class="sub" id="kAddedSub">New IDs since previous</div></div>
+      <div class="kpi warn"><div class="label">Net Queue Change</div><div class="value" id="kNet">—</div><div class="sub" id="kNetSub">Current − Previous</div></div>
+      <div class="kpi info"><div class="label">Previous Queue Size</div><div class="value" id="kPrevTotal">—</div><div class="sub" id="kPrevTotalSub">At previous snapshot</div></div>
+      <div class="kpi info"><div class="label">Time Between Snapshots</div><div class="value" id="kSpan">—</div><div class="sub" id="kSpanSub">Previous → Current</div></div>
+    </div>
+  </div>
+
+  <div id="noComparisonHint" class="card" style="margin-top: 18px; padding: 12px 18px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 13px; color: #92400e;">
+    💡 <strong>Upload a previous snapshot</strong> to see how many tickets have been removed from the queue (worked) and how many new ones have come in since that earlier export. Without it, only the current state is shown.
+  </div>
+
+  <div class="grid-2" style="margin-top: 24px;">
+    <div class="card">
+      <h2>📅 Volume by Requested Date</h2>
+      <div class="chart-wrap"><canvas id="chartVolume"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>🏷️ Issue Type Breakdown</h2>
+      <div class="chart-wrap"><canvas id="chartIssue"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>⏱️ Priority Buckets (SLA-based)</h2>
+    <table>
+      <thead><tr><th>Priority</th><th>Age Range</th><th class="num">Count</th><th class="num">%</th></tr></thead>
+      <tbody id="bucketBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>📅 New Tickets by Date (CST)</h2>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">From the Current snapshot. Grouped by <em>Requested</em> date.</div>
+    <table>
+      <thead><tr><th>Date</th><th class="num">New tickets in</th><th class="num">Still in queue now</th></tr></thead>
+      <tbody id="dailyBody"></tbody>
+      <tfoot><tr><td>TOTAL</td><td class="num" id="dailyNewTotal">0</td><td class="num" id="dailyInQueueTotal">0</td></tr></tfoot>
+    </table>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>🏷️ Issue Type Detail</h2>
+    <table>
+      <thead><tr><th>Issue</th><th class="num">Count</th><th class="num">% of queue</th></tr></thead>
+      <tbody id="issueBody"></tbody>
+      <tfoot><tr><td>TOTAL</td><td class="num" id="issueTotal">0</td><td class="num">100%</td></tr></tfoot>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  let rows = [];       // Current snapshot
+  let prevRows = [];   // Previous snapshot (optional, for comparison)
+  let charts = {};
+
+  const fmt = (n) => n == null ? "—" : n.toLocaleString();
+  const pct = (n, d) => d ? ((n / d) * 100).toFixed(1) + "%" : "0%";
+
+  const $ = (id) => document.getElementById(id);
+
+  // CSV timestamps are naive wall-clock strings ("YYYY-MM-DD HH:MM") with no TZ.
+  // Zendesk exports them in the account's timezone, so we treat each string as
+  // being in the dashboard's selected TZ and compute the real UTC Date from there.
+  function parseDate(s, tz) {
+    if (!s) return null;
+    s = s.trim();
+    if (!s || s === "-" || s === "'-") return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (!m) return null;
+    const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
+
+    // Start with a "guess" Date — the wall time interpreted as if it were UTC.
+    const guess = new Date(Date.UTC(y, mo - 1, d, h, mi));
+    // Figure out what `guess` renders as in the target TZ, then use that
+    // mismatch to compute the true offset between TZ and UTC at that moment.
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(guess);
+    const get = (t) => parts.find(p => p.type === t).value;
+    let hr = +get("hour"); if (hr === 24) hr = 0;
+    const wallInTzAsUtc = Date.UTC(+get("year"), +get("month") - 1, +get("day"), hr, +get("minute"));
+    const offsetMs = wallInTzAsUtc - guess.getTime();
+    // Real UTC = guess - offset (so that when rendered in TZ, it shows the original wall time)
+    return new Date(guess.getTime() - offsetMs);
+  }
+
+  // Date key for grouping — uses raw string's date portion, since the string IS
+  // already in the selected TZ (per the assumption above). This avoids any
+  // round-trip TZ errors and is exact.
+  function dateKeyRaw(s) {
+    if (!s) return null;
+    s = s.trim();
+    if (!s || s === "-" || s === "'-") return null;
+    return s.slice(0, 10);
+  }
+  function fmtInTz(d, tz) {
+    if (!d) return "—";
+    return new Intl.DateTimeFormat([], { timeZone: tz, month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(d);
+  }
+  function dayLabelInTz(d, tz) {
+    if (!d) return "";
+    return new Intl.DateTimeFormat([], { timeZone: tz, weekday: "short", month: "short", day: "numeric" }).format(d);
+  }
+  function addDaysKey(key, delta) {
+    const [y,m,d] = key.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d + delta));
+    return dt.toISOString().slice(0, 10);
+  }
+
+  function updateNow() { $("now").textContent = "Updated: " + new Date().toLocaleString(); }
+
+  // CSV / upload handling
+  function wireZone(zoneId, inputId, handler) {
+    const z = $(zoneId);
+    z.addEventListener("click", (e) => { if (e.target.tagName !== "INPUT") $(inputId).click(); });
+    z.addEventListener("dragover", (e) => { e.preventDefault(); z.classList.add("dragover"); });
+    z.addEventListener("dragleave", () => z.classList.remove("dragover"));
+    z.addEventListener("drop", (e) => {
+      e.preventDefault(); z.classList.remove("dragover");
+      if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+    });
+    $(inputId).addEventListener("change", (e) => { if (e.target.files[0]) handler(e.target.files[0]); });
+  }
+  wireZone("uploadZone", "csvFile", handleFile);
+  wireZone("prevUploadZone", "prevFile", handlePrevFile);
+  const TZ = "America/Chicago"; // All data + comparisons are in CST/CDT
+
+  $("refreshBtn").addEventListener("click", () => { if (rows.length) render(); });
+  $("slaTarget").addEventListener("change", () => { if (rows.length) render(); });
+  $("sampleBtn").addEventListener("click", loadSample);
+
+  function handleFile(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (res) => {
+        rows = res.data.filter((r) => r.ID);
+        window._loadedAt = new Date();
+        window._loadedFile = file.name;
+        $("meta").textContent = `Loaded ${rows.length} queue tickets from ${file.name} at ${window._loadedAt.toLocaleString()}`;
+        render();
+      }
+    });
+  }
+
+  function handlePrevFile(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (res) => {
+        prevRows = res.data.filter((r) => r.ID);
+        window._prevLoadedAt = new Date();
+        window._prevFileName = file.name;
+        $("meta").textContent = `Loaded ${rows.length} current + ${prevRows.length} previous tickets`;
+        render();
+      }
+    });
+  }
+
+  // Compute latest timestamp from a row set (treating strings as CST)
+  function maxTs(rowSet) {
+    const ts = rowSet.map(r => [r.Requested, r.Updated].map(s => s && s.trim()).filter(Boolean)).flat().filter(Boolean);
+    if (!ts.length) return null;
+    ts.sort();
+    return ts[ts.length - 1]; // lex sort works on "YYYY-MM-DD HH:MM"
+  }
+
+  function loadSample() {
+    // Minimal demo data
+    const sample = `ID,Ticket status,Subject,Requester,Requested,Updated,Intent,SLA,Assignee,Order Num,VIP Level (T),Issue
+1,New,Damaged shirt,Alice,2026-04-21 09:00,2026-04-21 09:00,,2026-04-21 21:00,,123,Gold,System::order damaged or defective
+2,Open,Late delivery,Bob,2026-04-20 08:30,2026-04-22 08:00,,2026-04-20 20:30,Sarah Smith,456,Diamond,System::late delivery
+3,New,Wrong item,Carol,2026-04-22 07:00,2026-04-22 07:00,,2026-04-22 19:00,,789,Silver,System::wrong items delivered`;
+    rows = Papa.parse(sample, { header: true, skipEmptyLines: true }).data;
+    $("meta").textContent = `Loaded ${rows.length} sample tickets`;
+    render();
+  }
+
+  function render() {
+    $("emptyState").classList.add("hidden");
+    $("dashboard").classList.remove("hidden");
+    updateNow();
+
+    const now = new Date();
+    const tz = TZ;
+    const tzShort = "CST/CDT";
+    // Today/yesterday keys in CST
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const pg = (t) => parts.find(p => p.type === t).value;
+    const todayKey = `${pg("year")}-${pg("month")}-${pg("day")}`;
+    const yestKey = addDaysKey(todayKey, -1);
+    const slaHrs = parseFloat($("slaTarget").value) || 12;
+
+    // Enrich rows. CSV timestamps are naive CST strings; parseDate builds a
+    // real UTC Date that represents that wall-clock moment in CST. dateKeyRaw
+    // uses the original string, which is always correct for day grouping.
+    const enriched = rows.map(r => {
+      const reqD = parseDate(r.Requested, tz);
+      const updD = parseDate(r.Updated, tz);
+      const slaD = parseDate(r.SLA, tz);
+      const ageH = reqD ? (now - reqD) / 3600000 : null;
+      const slaStatus = slaD ? (slaD < now ? "breached" : (slaD - now)/3600000 < 24 ? "atrisk" : "ok") : "none";
+      return {
+        ...r, _req: reqD, _upd: updD, _sla: slaD, _ageH: ageH, _slaStatus: slaStatus,
+        _reqKey: dateKeyRaw(r.Requested), _updKey: dateKeyRaw(r.Updated)
+      };
+    });
+
+    // KPIs
+    const total = enriched.length;
+    const statusCounts = enriched.reduce((a,r) => (a[r["Ticket status"]] = (a[r["Ticket status"]]||0)+1, a), {});
+    $("kTotal").textContent = fmt(total);
+    $("kTotalSub").textContent = Object.entries(statusCounts).map(([k,v]) => `${k}: ${v}`).join(" · ");
+
+    // "New In" = ticket's Requested timestamp falls on that day (CST)
+    const newToday = enriched.filter(r => r._reqKey === todayKey).length;
+    const newYest = enriched.filter(r => r._reqKey === yestKey).length;
+    $("kNewToday").textContent = fmt(newToday);
+    $("kNewYest").textContent = fmt(newYest);
+
+    // Comparison layer: if previous snapshot loaded, compute set diffs
+    const hasPrev = prevRows.length > 0;
+    if (hasPrev) {
+      $("comparisonSection").style.display = "";
+      $("noComparisonHint").style.display = "none";
+      const currentIds = new Set(enriched.map(r => r.ID));
+      const prevIds = new Set(prevRows.map(r => r.ID));
+      const worked = [...prevIds].filter(id => !currentIds.has(id));
+      const added = [...currentIds].filter(id => !prevIds.has(id));
+      const prevTotal = prevIds.size;
+      const netChange = currentIds.size - prevTotal;
+
+      $("kWorked").textContent = fmt(worked.length);
+      $("kAdded").textContent = fmt(added.length);
+      $("kPrevTotal").textContent = fmt(prevTotal);
+      $("kNet").textContent = (netChange > 0 ? "+" : "") + netChange.toLocaleString();
+      $("kNet").style.color = netChange < 0 ? "#065f46" : netChange > 0 ? "#991b1b" : "#111827";
+
+      // Time between snapshots, using max timestamp in each set
+      const prevMax = maxTs(prevRows);
+      const currMax = maxTs(rows);
+      if (prevMax && currMax) {
+        const prevD = parseDate(prevMax, tz);
+        const currD = parseDate(currMax, tz);
+        const spanMin = Math.max(0, Math.round((currD - prevD) / 60000));
+        const spanH = Math.floor(spanMin / 60);
+        const spanM = spanMin % 60;
+        $("kSpan").textContent = spanH > 0 ? `${spanH}h ${spanM}m` : `${spanM}m`;
+        $("kSpanSub").textContent = `${prevMax} → ${currMax} CST`;
+      } else {
+        $("kSpan").textContent = "—";
+      }
+    } else {
+      $("comparisonSection").style.display = "none";
+      $("noComparisonHint").style.display = "";
+    }
+
+    const withSla = enriched.filter(r => r._sla);
+    const breached = enriched.filter(r => r._slaStatus === "breached").length;
+    const atRisk = enriched.filter(r => r._slaStatus === "atrisk").length;
+    const ok = enriched.filter(r => r._slaStatus === "ok").length;
+    const slPct = withSla.length ? ((ok / withSla.length) * 100).toFixed(1) : "0.0";
+    $("kSL").textContent = slPct + "%";
+    $("kSLSub").textContent = `${ok} of ${withSla.length} within SLA`;
+    $("kBreach").textContent = fmt(breached);
+    $("kBreachSub").textContent = `${atRisk} at risk (<24h)`;
+
+    const oldest = enriched.reduce((m,r) => r._ageH > (m||0) ? r._ageH : m, 0);
+    $("kOldest").textContent = oldest ? oldest.toFixed(1) + "h" : "—";
+
+    // Volume by requested date (CST) from Current snapshot
+    const volByDate = {};
+    enriched.forEach(r => {
+      if (r._reqKey) volByDate[r._reqKey] = (volByDate[r._reqKey]||0) + 1;
+    });
+    const volKeys = Object.keys(volByDate).sort();
+    renderVolumeChart(volKeys, volKeys.map(k => volByDate[k]||0));
+
+    // Daily totals table: every row is "still in queue now" (since Current snapshot = queue now)
+    let sumNew = 0;
+    $("dailyBody").innerHTML = volKeys.map(k => {
+      const n = volByDate[k]||0;
+      sumNew += n;
+      return `<tr><td>${k}</td><td class="num">${n}</td><td class="num">${n}</td></tr>`;
+    }).join("");
+    $("dailyNewTotal").textContent = fmt(sumNew);
+    $("dailyInQueueTotal").textContent = fmt(sumNew);
+
+    // Issue breakdown
+    const issues = {};
+    enriched.forEach(r => {
+      const label = (r.Issue || "").trim() || "(Untagged)";
+      issues[label] = (issues[label]||0) + 1;
+    });
+    const issueList = Object.entries(issues).sort((a,b) => b[1]-a[1]);
+    renderIssueChart(issueList.slice(0, 10));
+    const issueBody = $("issueBody");
+    let issueSum = 0;
+    issueBody.innerHTML = issueList.map(([k,v]) => {
+      issueSum += v;
+      return `<tr><td>${escapeHtml(k)}</td>
+      <td class="num">${v}</td>
+      <td class="num"><span class="pct-bar"><div style="width:${(v/total*100).toFixed(1)}%"></div></span>${pct(v,total)}</td></tr>`;
+    }).join("");
+    $("issueTotal").textContent = fmt(issueSum);
+
+    // Priority buckets
+    const buckets = [
+      { name: "P1 - Critical", cls: "p1", min: slaHrs, max: Infinity },
+      { name: "P2 - High", cls: "p2", min: slaHrs*0.75, max: slaHrs },
+      { name: "P3 - Medium", cls: "p3", min: slaHrs*0.5, max: slaHrs*0.75 },
+      { name: "P4 - Normal", cls: "p4", min: 0, max: slaHrs*0.5 }
+    ];
+    const bkBody = $("bucketBody");
+    bkBody.innerHTML = buckets.map(b => {
+      const c = enriched.filter(r => r._ageH != null && r._ageH >= b.min && r._ageH < b.max).length;
+      const range = b.max === Infinity ? `> ${b.min.toFixed(1)}h (breached)` : `${b.min.toFixed(1)} – ${b.max.toFixed(1)}h`;
+      return `<tr class="bucket-row"><td><span class="bucket-pill ${b.cls}">${b.name}</span></td><td>${range}</td><td class="num">${c}</td><td class="num">${pct(c,total)}</td></tr>`;
+    }).join("");
+
+    // Timestamps banner
+    const allReq = enriched.map(r => r._req).filter(Boolean);
+    const allUpd = enriched.map(r => r._upd).filter(Boolean);
+    const allStamps = [...allReq, ...allUpd];
+    const earliest = allStamps.length ? new Date(Math.min(...allStamps)) : null;
+    const latest = allStamps.length ? new Date(Math.max(...allStamps)) : null;
+    $("tsDataRange").textContent = earliest && latest
+      ? `${fmtInTz(earliest, tz)}  →  ${fmtInTz(latest, tz)} CST`
+      : "—";
+    $("tsLoaded").textContent = (window._loadedAt ? fmtInTz(window._loadedAt, tz) : fmtInTz(new Date(), tz)) + " CST";
+
+    // Snapshot age — use latest timestamp in data (when CSV was actually exported)
+    if (latest) {
+      const ageMin = Math.floor((now - latest) / 60000);
+      const ageH = Math.floor(ageMin / 60);
+      const ageM = ageMin % 60;
+      const ageStr = ageH > 0 ? `${ageH}h ${ageM}m ago` : `${ageMin}m ago`;
+      const stale = ageMin > 30;
+      $("tsAge").textContent = `Snapshot: ${ageStr}${stale ? " — re-upload for current data" : ""}`;
+      $("tsAge").style.background = stale ? "#fee2e2" : "#d1fae5";
+      $("tsAge").style.color = stale ? "#991b1b" : "#065f46";
+    }
+
+    // Label today/yesterday cards with actual dates in selected TZ
+    const todayDate = new Date(todayKey + "T12:00:00Z");
+    const yestDate = new Date(yestKey + "T12:00:00Z");
+    $("kNewTodaySub").textContent = `Requested ${dayLabelInTz(todayDate, tz)}`;
+    $("kNewYestSub").textContent = `Requested ${dayLabelInTz(yestDate, tz)}`;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  }
+
+  function renderVolumeChart(labels, inbound) {
+    if (charts.vol) charts.vol.destroy();
+    charts.vol = new Chart($("chartVolume"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "New tickets in (by Requested date)", data: inbound, backgroundColor: "#6366f1" }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 12 } } } },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  }
+
+  function renderIssueChart(topList) {
+    if (charts.iss) charts.iss.destroy();
+    charts.iss = new Chart($("chartIssue"), {
+      type: "bar",
+      data: {
+        labels: topList.map(x => x[0].length > 32 ? x[0].slice(0,30)+"…" : x[0]),
+        datasets: [{ label: "Tickets", data: topList.map(x => x[1]), backgroundColor: "#f59e0b" }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true } }
+      }
+    });
+  }
+
+  updateNow();
+  setInterval(updateNow, 60000);
+</script>
+</body>
+</html>
