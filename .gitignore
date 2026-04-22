@@ -1,0 +1,20 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local test data (don't commit real customer CSVs)
+*.csv
+*.zip
+uploads/
+test-data/
+
+# Environment
+.env
+.env.local
