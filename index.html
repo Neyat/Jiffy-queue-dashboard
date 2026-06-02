@@ -49,19 +49,20 @@
   .pct-bar { display: inline-block; height: 8px; background: #e5e7eb; border-radius: 4px; width: 100px; vertical-align: middle; margin-right: 8px; }
   .pct-bar > div { height: 100%; background: #6366f1; border-radius: 4px; }
 
-  .bucket-row td { padding: 12px; }
-  .bucket-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .bucket-pill.p1 { background: #fee2e2; color: #991b1b; }
-  .bucket-pill.p2 { background: #fed7aa; color: #9a3412; }
-  .bucket-pill.p3 { background: #fef3c7; color: #92400e; }
-  .bucket-pill.p4 { background: #d1fae5; color: #065f46; }
+  .bucket-row td { padding: 11px 12px; font-size: 13px; }
+  .bucket-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
+  .bucket-label { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .bk-missed  td { background: #ffd6d6; } .bk-missed  .bucket-label { color: #991b1b; }
+  .bk-critical td { background: #fde68a; } .bk-critical .bucket-label { color: #78350f; }
+  .bk-urgent  td { background: #fef3c7; } .bk-urgent  .bucket-label { color: #92400e; }
+  .bk-high    td { background: #d1fae5; } .bk-high    .bucket-label { color: #065f46; }
+  .bk-medium  td { background: #e0f2fe; } .bk-medium  .bucket-label { color: #075985; }
+  .bk-low     td { background: #f0fdf4; } .bk-low     .bucket-label { color: #166534; }
+  .bk-safe    td { background: #f8fafc; } .bk-safe    .bucket-label { color: #374151; }
+  .status-dot { display:inline-block; width:12px; height:12px; border-radius:50%; }
 
   .empty-state { padding: 60px 20px; text-align: center; color: #6b7280; background: #fff; border-radius: 10px; }
   .empty-state .big { font-size: 48px; margin-bottom: 12px; }
-
-  .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #e5e7eb; }
-  .tab { padding: 10px 18px; cursor: pointer; font-size: 14px; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; }
-  .tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
 
   .scroll-box { max-height: 400px; overflow-y: auto; }
   .hidden { display: none; }
@@ -70,6 +71,10 @@
   .badge-new { background: #dbeafe; color: #1e40af; }
   .badge-open { background: #fef3c7; color: #92400e; }
   .badge-vip { background: #fce7f3; color: #9d174d; }
+
+  .sla-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; padding: 10px 14px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+  .sla-legend-item { display: flex; align-items: center; gap: 6px; }
+  .sla-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -83,20 +88,21 @@
 </header>
 
 <div class="controls">
-  <label class="upload-zone" id="uploadZone">
+  <div class="upload-zone" id="uploadZone">
     <strong>📂 Current snapshot</strong>
     <div style="font-size:12px;color:#6b7280;margin-top:4px;">Latest Zendesk queue export</div>
     <input type="file" id="csvFile" accept=".csv,.zip" />
-  </label>
-  <label class="upload-zone" id="prevUploadZone">
+  </div>
+  <div class="upload-zone" id="prevUploadZone">
     <strong>📂 Previous snapshot (optional)</strong>
     <div style="font-size:12px;color:#6b7280;margin-top:4px;">Earlier queue export — enables "Worked" comparison</div>
     <input type="file" id="prevFile" accept=".csv,.zip" />
-  </label>
+  </div>
   <div>
     <label for="slaTarget">SLA Target (hrs):</label>
     <input type="number" id="slaTarget" value="12" min="1" max="72" />
   </div>
+
   <div style="font-size:13px;color:#6b7280;">🌐 <strong>All times: CST/CDT</strong></div>
   <button id="refreshBtn" class="secondary">🔄 Recalculate</button>
   <button id="sampleBtn" class="secondary">Load Sample</button>
@@ -118,9 +124,9 @@
     </div>
     <div style="margin-top:10px;font-size:12px;color:#4b5563;border-top:1px solid #c7d2fe;padding-top:10px;">
       <strong>⚠️ Reading these numbers:</strong>
-      <span style="margin-left:6px;"><b>New In</b> = tickets whose <em>Requested</em> timestamp falls on that day. Counts stop at the snapshot time.</span>
-      <span style="margin-left:12px;"><b>Worked (since previous)</b> = tickets that were in the <em>Previous</em> snapshot but are no longer in <em>Current</em> — i.e., removed from the queue (resolved/closed/merged).</span>
-      <span style="margin-left:12px;color:#dc2626;"><b>Worked requires both snapshots uploaded.</b> With only a current snapshot, we can't derive what's been removed.</span>
+      <span style="margin-left:6px;"><b>New In</b> = tickets whose <em>Requested</em> timestamp falls on that day.</span>
+      <span style="margin-left:12px;"><b>Service Level %</b> = tickets whose age is under the SLA target ÷ total tickets. Same calculation as the Priority Buckets table.</span>
+      <span style="margin-left:12px;"><b>Worked (since previous)</b> = tickets removed from the queue between snapshots (resolved/closed/merged).</span>
     </div>
   </div>
 
@@ -129,9 +135,19 @@
     <div class="kpi info"><div class="label">Total in Queue</div><div class="value" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
     <div class="kpi info"><div class="label">New In Today</div><div class="value" id="kNewToday">—</div><div class="sub" id="kNewTodaySub">Requested today</div></div>
     <div class="kpi info"><div class="label">New In Yesterday</div><div class="value" id="kNewYest">—</div><div class="sub" id="kNewYestSub">Requested yesterday</div></div>
-    <div class="kpi good"><div class="label">Service Level</div><div class="value" id="kSL">—</div><div class="sub" id="kSLSub">within SLA</div></div>
+    <div class="kpi good" id="kSLCard"><div class="label">Service Level</div><div class="value" id="kSL">—</div><div class="sub" id="kSLSub">within SLA</div></div>
     <div class="kpi bad"><div class="label">SLA Breached</div><div class="value" id="kBreach">—</div><div class="sub" id="kBreachSub"></div></div>
+    <div class="kpi warn"><div class="label">At Risk</div><div class="value" id="kAtRisk">—</div><div class="sub" id="kAtRiskSub">SLA deadline soon</div></div>
     <div class="kpi warn"><div class="label">Oldest Ticket</div><div class="value" id="kOldest">—</div><div class="sub">hours in queue</div></div>
+  </div>
+
+  <!-- SLA method legend -->
+  <div class="sla-legend" style="margin-bottom:18px;">
+    <strong style="font-size:12px;">SLA Status logic (age-based, matches Priority Buckets):</strong>
+    <div class="sla-legend-item"><span class="sla-dot" style="background:#ef4444"></span> <b>Breached</b> — ticket age ≥ SLA target</div>
+    <div class="sla-legend-item"><span class="sla-dot" style="background:#f59e0b"></span> <b>At Risk</b> — ticket age within 2h of SLA target</div>
+    <div class="sla-legend-item"><span class="sla-dot" style="background:#10b981"></span> <b>Within SLA</b> — ticket age &gt; 2h below SLA target</div>
+    <div class="sla-legend-item"><span class="sla-dot" style="background:#d1d5db"></span> <b>No Date</b> — no Requested timestamp (excluded from counts)</div>
   </div>
 
   <div id="comparisonSection" style="display:none;">
@@ -161,9 +177,17 @@
   </div>
 
   <div class="card" style="margin-bottom: 24px;">
-    <h2>⏱️ Priority Buckets (SLA-based)</h2>
-    <table>
-      <thead><tr><th>Priority</th><th>Age Range</th><th class="num">Count</th><th class="num">%</th></tr></thead>
+    <h2>⏱️ Priority Breakdown by 2-Hour Buckets</h2>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">
+      Each bucket spans 2 hours of ticket age. "Time Range" shows when (CST) tickets in that bucket were requested, working backwards from now.
+    </div>
+    <table id="bucketTable">
+      <thead>
+        <tr>
+          <th>Priority</th><th>Age Range</th><th>Time Range (CST)</th>
+          <th class="num">Count</th><th class="num">Percentage</th><th class="num">Status</th>
+        </tr>
+      </thead>
       <tbody id="bucketBody"></tbody>
     </table>
   </div>
@@ -190,18 +214,15 @@
 </div>
 
 <script>
-  let rows = [];       // Current snapshot
-  let prevRows = [];   // Previous snapshot (optional, for comparison)
+  let rows = [];
+  let prevRows = [];
   let charts = {};
 
   const fmt = (n) => n == null ? "—" : n.toLocaleString();
   const pct = (n, d) => d ? ((n / d) * 100).toFixed(1) + "%" : "0%";
-
   const $ = (id) => document.getElementById(id);
 
-  // CSV timestamps are naive wall-clock strings ("YYYY-MM-DD HH:MM") with no TZ.
-  // Zendesk exports them in the account's timezone, so we treat each string as
-  // being in the dashboard's selected TZ and compute the real UTC Date from there.
+  // Parse naive wall-clock CSV string (treated as tz-local) into a real UTC Date
   function parseDate(s, tz) {
     if (!s) return null;
     s = s.trim();
@@ -209,11 +230,7 @@
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
     if (!m) return null;
     const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
-
-    // Start with a "guess" Date — the wall time interpreted as if it were UTC.
     const guess = new Date(Date.UTC(y, mo - 1, d, h, mi));
-    // Figure out what `guess` renders as in the target TZ, then use that
-    // mismatch to compute the true offset between TZ and UTC at that moment.
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
       hour: "2-digit", minute: "2-digit", hour12: false
@@ -222,19 +239,16 @@
     let hr = +get("hour"); if (hr === 24) hr = 0;
     const wallInTzAsUtc = Date.UTC(+get("year"), +get("month") - 1, +get("day"), hr, +get("minute"));
     const offsetMs = wallInTzAsUtc - guess.getTime();
-    // Real UTC = guess - offset (so that when rendered in TZ, it shows the original wall time)
     return new Date(guess.getTime() - offsetMs);
   }
 
-  // Date key for grouping — uses raw string's date portion, since the string IS
-  // already in the selected TZ (per the assumption above). This avoids any
-  // round-trip TZ errors and is exact.
   function dateKeyRaw(s) {
     if (!s) return null;
     s = s.trim();
     if (!s || s === "-" || s === "'-") return null;
     return s.slice(0, 10);
   }
+
   function fmtInTz(d, tz) {
     if (!d) return "—";
     return new Intl.DateTimeFormat([], { timeZone: tz, month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(d);
@@ -251,10 +265,11 @@
 
   function updateNow() { $("now").textContent = "Updated: " + new Date().toLocaleString(); }
 
-  // CSV / upload handling
   function wireZone(zoneId, inputId, handler) {
     const z = $(zoneId);
-    z.addEventListener("click", (e) => { if (e.target.tagName !== "INPUT") $(inputId).click(); });
+    const inp = $(inputId);
+    z.addEventListener("click", () => inp.click());
+    inp.addEventListener("click", (e) => e.stopPropagation());
     z.addEventListener("dragover", (e) => { e.preventDefault(); z.classList.add("dragover"); });
     z.addEventListener("dragleave", () => z.classList.remove("dragover"));
     z.addEventListener("drop", (e) => {
@@ -265,7 +280,8 @@
   }
   wireZone("uploadZone", "csvFile", handleFile);
   wireZone("prevUploadZone", "prevFile", handlePrevFile);
-  const TZ = "America/Chicago"; // All data + comparisons are in CST/CDT
+
+  const TZ = "America/Chicago";
 
   $("refreshBtn").addEventListener("click", () => { if (rows.length) render(); });
   $("slaTarget").addEventListener("change", () => { if (rows.length) render(); });
@@ -273,13 +289,12 @@
 
   function handleFile(file) {
     Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
+      header: true, skipEmptyLines: true,
       complete: (res) => {
         rows = res.data.filter((r) => r.ID);
         window._loadedAt = new Date();
         window._loadedFile = file.name;
-        $("meta").textContent = `Loaded ${rows.length} queue tickets from ${file.name} at ${window._loadedAt.toLocaleString()}`;
+        $("meta").textContent = `Loaded ${rows.length} queue tickets from ${file.name}`;
         render();
       }
     });
@@ -287,8 +302,7 @@
 
   function handlePrevFile(file) {
     Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
+      header: true, skipEmptyLines: true,
       complete: (res) => {
         prevRows = res.data.filter((r) => r.ID);
         window._prevLoadedAt = new Date();
@@ -299,22 +313,48 @@
     });
   }
 
-  // Compute latest timestamp from a row set (treating strings as CST)
   function maxTs(rowSet) {
     const ts = rowSet.map(r => [r.Requested, r.Updated].map(s => s && s.trim()).filter(Boolean)).flat().filter(Boolean);
     if (!ts.length) return null;
     ts.sort();
-    return ts[ts.length - 1]; // lex sort works on "YYYY-MM-DD HH:MM"
+    return ts[ts.length - 1];
   }
 
   function loadSample() {
-    // Minimal demo data
-    const sample = `ID,Ticket status,Subject,Requester,Requested,Updated,Intent,SLA,Assignee,Order Num,VIP Level (T),Issue
-1,New,Damaged shirt,Alice,2026-04-21 09:00,2026-04-21 09:00,,2026-04-21 21:00,,123,Gold,System::order damaged or defective
-2,Open,Late delivery,Bob,2026-04-20 08:30,2026-04-22 08:00,,2026-04-20 20:30,Sarah Smith,456,Diamond,System::late delivery
-3,New,Wrong item,Carol,2026-04-22 07:00,2026-04-22 07:00,,2026-04-22 19:00,,789,Silver,System::wrong items delivered`;
-    rows = Papa.parse(sample, { header: true, skipEmptyLines: true }).data;
-    $("meta").textContent = `Loaded ${rows.length} sample tickets`;
+    // Sample data that exercises all SLA states: breached, at-risk, ok, no SLA
+    const now = new Date();
+    const tz = TZ;
+    // Build timestamps relative to now so SLA states are always meaningful
+    const fmtTs = (msOffset) => {
+      const d = new Date(now.getTime() + msOffset);
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false
+      }).format(d).replace(", ", " ");
+    };
+    const h = 3600000;
+    const rows_sample = [
+      // Breached: SLA passed 3h ago, requested 14h ago
+      { ID: "1001", "Ticket status": "Open",  Subject: "Damaged shirt",    Requester: "Alice", Requested: fmtTs(-14*h), Updated: fmtTs(-2*h), SLA: fmtTs(-3*h),   Issue: "System::order damaged or defective" },
+      // Breached: SLA passed 1h ago, requested 13h ago
+      { ID: "1002", "Ticket status": "New",   Subject: "Missing package",  Requester: "Bob",   Requested: fmtTs(-13*h), Updated: fmtTs(-1*h), SLA: fmtTs(-1*h),   Issue: "System::late delivery" },
+      // At risk: SLA in 1h (within default 2h at-risk window), requested 11h ago
+      { ID: "1003", "Ticket status": "Open",  Subject: "Wrong size",       Requester: "Carol", Requested: fmtTs(-11*h), Updated: fmtTs(-0.5*h), SLA: fmtTs(1*h),  Issue: "System::wrong items delivered" },
+      // OK: SLA in 5h, requested 7h ago
+      { ID: "1004", "Ticket status": "New",   Subject: "Late delivery",    Requester: "Dave",  Requested: fmtTs(-7*h),  Updated: fmtTs(-1*h),  SLA: fmtTs(5*h),  Issue: "System::late delivery" },
+      // OK: SLA in 8h, requested 4h ago
+      { ID: "1005", "Ticket status": "Open",  Subject: "Tracking update",  Requester: "Eve",   Requested: fmtTs(-4*h),  Updated: fmtTs(-0.5*h), SLA: fmtTs(8*h), Issue: "System::tracking issue" },
+      // No SLA set, requested 6h ago
+      { ID: "1006", "Ticket status": "New",   Subject: "General inquiry",  Requester: "Frank", Requested: fmtTs(-6*h),  Updated: fmtTs(-1*h),  SLA: "",          Issue: "(Untagged)" },
+    ];
+    const header = "ID,Ticket status,Subject,Requester,Requested,Updated,SLA,Issue\n";
+    const csv = header + rows_sample.map(r =>
+      [r.ID, r["Ticket status"], r.Subject, r.Requester, r.Requested, r.Updated, r.SLA, r.Issue]
+        .map(v => `"${v}"`).join(",")
+    ).join("\n");
+    rows = Papa.parse(csv, { header: true, skipEmptyLines: true }).data;
+    window._loadedAt = new Date();
+    $("meta").textContent = `Loaded ${rows.length} sample tickets (2 breached, 1 at-risk, 2 ok, 1 no SLA)`;
     render();
   }
 
@@ -325,60 +365,99 @@
 
     const now = new Date();
     const tz = TZ;
-    const tzShort = "CST/CDT";
-    // Today/yesterday keys in CST
     const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
     const pg = (t) => parts.find(p => p.type === t).value;
     const todayKey = `${pg("year")}-${pg("month")}-${pg("day")}`;
     const yestKey = addDaysKey(todayKey, -1);
-    const slaHrs = parseFloat($("slaTarget").value) || 12;
 
-    // Enrich rows. CSV timestamps are naive CST strings; parseDate builds a
-    // real UTC Date that represents that wall-clock moment in CST. dateKeyRaw
-    // uses the original string, which is always correct for day grouping.
+    const slaHrs = parseFloat($("slaTarget").value) || 12;
+    const atRiskHrs = 2; // 2-hour at-risk window, matches bucket step size
+
+    // Update legend labels
+
+    // Enrich rows with parsed dates and SLA status
+    // SLA status is derived purely from ticket age vs the SLA target hours —
+    // same logic as the Priority Buckets, so both sections always agree.
+    //   "breached" = age >= slaHrs
+    //   "atrisk"   = age >= (slaHrs - atRiskHrs) but not yet breached
+    //   "ok"       = age < (slaHrs - atRiskHrs)
+    //   "none"     = no Requested timestamp (can't compute age)
     const enriched = rows.map(r => {
-      const reqD = parseDate(r.Requested, tz);
-      const updD = parseDate(r.Updated, tz);
-      const slaD = parseDate(r.SLA, tz);
-      const ageH = reqD ? (now - reqD) / 3600000 : null;
-      const slaStatus = slaD ? (slaD < now ? "breached" : (slaD - now)/3600000 < 24 ? "atrisk" : "ok") : "none";
+      const reqD  = parseDate(r.Requested, tz);
+      const updD  = parseDate(r.Updated,   tz);
+      const ageH  = reqD ? (now - reqD) / 3600000 : null;
+
+      let slaStatus = "none";
+      if (ageH !== null) {
+        if (ageH >= slaHrs) {
+          slaStatus = "breached";
+        } else if (ageH >= slaHrs - atRiskHrs) {
+          slaStatus = "atrisk";
+        } else {
+          slaStatus = "ok";
+        }
+      }
+
       return {
-        ...r, _req: reqD, _upd: updD, _sla: slaD, _ageH: ageH, _slaStatus: slaStatus,
+        ...r, _req: reqD, _upd: updD, _ageH: ageH, _slaStatus: slaStatus,
         _reqKey: dateKeyRaw(r.Requested), _updKey: dateKeyRaw(r.Updated)
       };
     });
 
-    // KPIs
+    // --- KPIs ---
     const total = enriched.length;
     const statusCounts = enriched.reduce((a,r) => (a[r["Ticket status"]] = (a[r["Ticket status"]]||0)+1, a), {});
     $("kTotal").textContent = fmt(total);
     $("kTotalSub").textContent = Object.entries(statusCounts).map(([k,v]) => `${k}: ${v}`).join(" · ");
 
-    // "New In" = ticket's Requested timestamp falls on that day (CST)
     const newToday = enriched.filter(r => r._reqKey === todayKey).length;
-    const newYest = enriched.filter(r => r._reqKey === yestKey).length;
+    const newYest  = enriched.filter(r => r._reqKey === yestKey).length;
     $("kNewToday").textContent = fmt(newToday);
-    $("kNewYest").textContent = fmt(newYest);
+    $("kNewYest").textContent  = fmt(newYest);
 
-    // Comparison layer: if previous snapshot loaded, compute set diffs
+    // SLA counts — all age-based, consistent with Priority Buckets
+    const breached  = enriched.filter(r => r._slaStatus === "breached").length;
+    const atRisk    = enriched.filter(r => r._slaStatus === "atrisk").length;
+    const okCount   = enriched.filter(r => r._slaStatus === "ok").length;
+    const noDate    = enriched.filter(r => r._slaStatus === "none").length;
+
+    // Service Level % = tickets NOT breached / total (same denominator as bucket table)
+    const withinSla = okCount + atRisk;
+    const slPct = total > 0 ? ((withinSla / total) * 100).toFixed(1) : "0.0";
+
+    $("kSL").textContent = slPct + "%";
+    $("kSLSub").textContent = `${withinSla} of ${total} under ${slaHrs}h`;
+    const slCard = $("kSLCard");
+    slCard.className = "kpi " + (parseFloat(slPct) >= 90 ? "good" : parseFloat(slPct) >= 70 ? "warn" : "bad");
+
+    $("kBreach").textContent   = fmt(breached);
+    $("kBreachSub").textContent = `age ≥ ${slaHrs}h · ${atRisk} approaching`;
+
+    $("kAtRisk").textContent    = fmt(atRisk);
+    $("kAtRiskSub").textContent = `age within ${atRiskHrs}h of ${slaHrs}h limit`;
+
+
+    const oldest = enriched.reduce((m,r) => r._ageH > (m||0) ? r._ageH : m, 0);
+    $("kOldest").textContent = oldest ? oldest.toFixed(1) + "h" : "—";
+
+    // --- Comparison layer ---
     const hasPrev = prevRows.length > 0;
     if (hasPrev) {
       $("comparisonSection").style.display = "";
       $("noComparisonHint").style.display = "none";
       const currentIds = new Set(enriched.map(r => r.ID));
-      const prevIds = new Set(prevRows.map(r => r.ID));
-      const worked = [...prevIds].filter(id => !currentIds.has(id));
-      const added = [...currentIds].filter(id => !prevIds.has(id));
-      const prevTotal = prevIds.size;
-      const netChange = currentIds.size - prevTotal;
+      const prevIds    = new Set(prevRows.map(r => r.ID));
+      const worked     = [...prevIds].filter(id => !currentIds.has(id));
+      const added      = [...currentIds].filter(id => !prevIds.has(id));
+      const prevTotal  = prevIds.size;
+      const netChange  = currentIds.size - prevTotal;
 
-      $("kWorked").textContent = fmt(worked.length);
-      $("kAdded").textContent = fmt(added.length);
+      $("kWorked").textContent  = fmt(worked.length);
+      $("kAdded").textContent   = fmt(added.length);
       $("kPrevTotal").textContent = fmt(prevTotal);
       $("kNet").textContent = (netChange > 0 ? "+" : "") + netChange.toLocaleString();
       $("kNet").style.color = netChange < 0 ? "#065f46" : netChange > 0 ? "#991b1b" : "#111827";
 
-      // Time between snapshots, using max timestamp in each set
       const prevMax = maxTs(prevRows);
       const currMax = maxTs(rows);
       if (prevMax && currMax) {
@@ -397,20 +476,7 @@
       $("noComparisonHint").style.display = "";
     }
 
-    const withSla = enriched.filter(r => r._sla);
-    const breached = enriched.filter(r => r._slaStatus === "breached").length;
-    const atRisk = enriched.filter(r => r._slaStatus === "atrisk").length;
-    const ok = enriched.filter(r => r._slaStatus === "ok").length;
-    const slPct = withSla.length ? ((ok / withSla.length) * 100).toFixed(1) : "0.0";
-    $("kSL").textContent = slPct + "%";
-    $("kSLSub").textContent = `${ok} of ${withSla.length} within SLA`;
-    $("kBreach").textContent = fmt(breached);
-    $("kBreachSub").textContent = `${atRisk} at risk (<24h)`;
-
-    const oldest = enriched.reduce((m,r) => r._ageH > (m||0) ? r._ageH : m, 0);
-    $("kOldest").textContent = oldest ? oldest.toFixed(1) + "h" : "—";
-
-    // Volume by requested date (CST) from Current snapshot
+    // --- Volume chart ---
     const volByDate = {};
     enriched.forEach(r => {
       if (r._reqKey) volByDate[r._reqKey] = (volByDate[r._reqKey]||0) + 1;
@@ -418,7 +484,7 @@
     const volKeys = Object.keys(volByDate).sort();
     renderVolumeChart(volKeys, volKeys.map(k => volByDate[k]||0));
 
-    // Daily totals table: every row is "still in queue now" (since Current snapshot = queue now)
+    // --- Daily table ---
     let sumNew = 0;
     $("dailyBody").innerHTML = volKeys.map(k => {
       const n = volByDate[k]||0;
@@ -428,7 +494,7 @@
     $("dailyNewTotal").textContent = fmt(sumNew);
     $("dailyInQueueTotal").textContent = fmt(sumNew);
 
-    // Issue breakdown
+    // --- Issue breakdown ---
     const issues = {};
     enriched.forEach(r => {
       const label = (r.Issue || "").trim() || "(Untagged)";
@@ -446,48 +512,72 @@
     }).join("");
     $("issueTotal").textContent = fmt(issueSum);
 
-    // Priority buckets
-    const buckets = [
-      { name: "P1 - Critical", cls: "p1", min: slaHrs, max: Infinity },
-      { name: "P2 - High", cls: "p2", min: slaHrs*0.75, max: slaHrs },
-      { name: "P3 - Medium", cls: "p3", min: slaHrs*0.5, max: slaHrs*0.75 },
-      { name: "P4 - Normal", cls: "p4", min: 0, max: slaHrs*0.5 }
+    // --- Priority buckets: MISSED SLA collapsed into one row, then 2-hour bands below ---
+    const fmtTime = (d) => new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true
+    }).format(d);
+
+    // Fixed 7 rows matching the reference design
+    const fixedBuckets = [
+      { name: "MISSED SLA", cls: "bk-missed",   dot: "#ef4444", lo: slaHrs,       top: Infinity },
+      { name: "CRITICAL",   cls: "bk-critical", dot: "#f59e0b", lo: slaHrs - 2,   top: slaHrs   },
+      { name: "URGENT",     cls: "bk-urgent",   dot: "#fbbf24", lo: slaHrs - 4,   top: slaHrs - 2 },
+      { name: "HIGH",       cls: "bk-high",     dot: "#10b981", lo: slaHrs - 6,   top: slaHrs - 4 },
+      { name: "MEDIUM",     cls: "bk-medium",   dot: "#94a3b8", lo: 4,            top: slaHrs - 6 },
+      { name: "LOW",        cls: "bk-low",      dot: "#cbd5e1", lo: 2,            top: 4          },
+      { name: "SAFE",       cls: "bk-safe",     dot: "#e2e8f0", lo: 0,            top: 2          },
     ];
+
     const bkBody = $("bucketBody");
-    bkBody.innerHTML = buckets.map(b => {
-      const c = enriched.filter(r => r._ageH != null && r._ageH >= b.min && r._ageH < b.max).length;
-      const range = b.max === Infinity ? `> ${b.min.toFixed(1)}h (breached)` : `${b.min.toFixed(1)} – ${b.max.toFixed(1)}h`;
-      return `<tr class="bucket-row"><td><span class="bucket-pill ${b.cls}">${b.name}</span></td><td>${range}</td><td class="num">${c}</td><td class="num">${pct(c,total)}</td></tr>`;
+    bkBody.innerHTML = fixedBuckets.map(b => {
+      const c = enriched.filter(r => r._ageH != null && r._ageH >= b.lo && (b.top === Infinity ? true : r._ageH < b.top)).length;
+      // Age label
+      const ageLabel = b.top === Infinity ? `${b.lo}+ hours` : `${b.lo}–${b.top} hours`;
+      // Time range: MISSED SLA shows "Before X", others show a clock window
+      let timeLabel;
+      if (b.top === Infinity) {
+        timeLabel = `Before ${fmtTime(new Date(now.getTime() - b.lo * 3600000))}`;
+      } else {
+        const tEnd   = new Date(now.getTime() - b.lo  * 3600000);
+        const tStart = new Date(now.getTime() - b.top * 3600000);
+        timeLabel = `${fmtTime(tStart)} – ${fmtTime(tEnd)}`;
+      }
+      return `<tr class="bucket-row ${b.cls}">
+        <td><span class="bucket-label">${b.name}</span></td>
+        <td>${ageLabel}</td>
+        <td>${timeLabel}</td>
+        <td class="num"><strong>${c}</strong></td>
+        <td class="num">${pct(c, total)}</td>
+        <td class="num"><span class="status-dot" style="background:${b.dot}"></span></td>
+      </tr>`;
     }).join("");
 
-    // Timestamps banner
+    // --- Timestamps banner ---
     const allReq = enriched.map(r => r._req).filter(Boolean);
     const allUpd = enriched.map(r => r._upd).filter(Boolean);
     const allStamps = [...allReq, ...allUpd];
     const earliest = allStamps.length ? new Date(Math.min(...allStamps)) : null;
-    const latest = allStamps.length ? new Date(Math.max(...allStamps)) : null;
+    const latest   = allStamps.length ? new Date(Math.max(...allStamps)) : null;
     $("tsDataRange").textContent = earliest && latest
       ? `${fmtInTz(earliest, tz)}  →  ${fmtInTz(latest, tz)} CST`
       : "—";
     $("tsLoaded").textContent = (window._loadedAt ? fmtInTz(window._loadedAt, tz) : fmtInTz(new Date(), tz)) + " CST";
 
-    // Snapshot age — use latest timestamp in data (when CSV was actually exported)
     if (latest) {
       const ageMin = Math.floor((now - latest) / 60000);
-      const ageH = Math.floor(ageMin / 60);
-      const ageM = ageMin % 60;
+      const ageH   = Math.floor(ageMin / 60);
+      const ageM   = ageMin % 60;
       const ageStr = ageH > 0 ? `${ageH}h ${ageM}m ago` : `${ageMin}m ago`;
-      const stale = ageMin > 30;
+      const stale  = ageMin > 30;
       $("tsAge").textContent = `Snapshot: ${ageStr}${stale ? " — re-upload for current data" : ""}`;
       $("tsAge").style.background = stale ? "#fee2e2" : "#d1fae5";
       $("tsAge").style.color = stale ? "#991b1b" : "#065f46";
     }
 
-    // Label today/yesterday cards with actual dates in selected TZ
     const todayDate = new Date(todayKey + "T12:00:00Z");
-    const yestDate = new Date(yestKey + "T12:00:00Z");
+    const yestDate  = new Date(yestKey  + "T12:00:00Z");
     $("kNewTodaySub").textContent = `Requested ${dayLabelInTz(todayDate, tz)}`;
-    $("kNewYestSub").textContent = `Requested ${dayLabelInTz(yestDate, tz)}`;
+    $("kNewYestSub").textContent  = `Requested ${dayLabelInTz(yestDate, tz)}`;
   }
 
   function escapeHtml(s) {
@@ -498,17 +588,8 @@
     if (charts.vol) charts.vol.destroy();
     charts.vol = new Chart($("chartVolume"), {
       type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "New tickets in (by Requested date)", data: inbound, backgroundColor: "#6366f1" }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 12 } } } },
-        scales: { y: { beginAtZero: true } }
-      }
+      data: { labels, datasets: [{ label: "New tickets in (by Requested date)", data: inbound, backgroundColor: "#6366f1" }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 12 } } } }, scales: { y: { beginAtZero: true } } }
     });
   }
 
@@ -516,16 +597,8 @@
     if (charts.iss) charts.iss.destroy();
     charts.iss = new Chart($("chartIssue"), {
       type: "bar",
-      data: {
-        labels: topList.map(x => x[0].length > 32 ? x[0].slice(0,30)+"…" : x[0]),
-        datasets: [{ label: "Tickets", data: topList.map(x => x[1]), backgroundColor: "#f59e0b" }]
-      },
-      options: {
-        indexAxis: "y",
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true } }
-      }
+      data: { labels: topList.map(x => x[0].length > 32 ? x[0].slice(0,30)+"…" : x[0]), datasets: [{ label: "Tickets", data: topList.map(x => x[1]), backgroundColor: "#f59e0b" }] },
+      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
     });
   }
 
